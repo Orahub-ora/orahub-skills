@@ -38,6 +38,26 @@ Professional quality principles:
 - Credentials: `orahub auth device-login` (primary) or `orahub config set --access-key "<ak>" --secret-key "<sk>"` (manual fallback)
 - Verify auth: `orahub auth verify --json`
 
+## Runtime Bootstrap (Required)
+
+When routing into an OraHub workflow, follow this policy:
+
+- Do not block on manual install questions before first execution.
+- Route to the correct leaf skill first, then let that skill own runtime/auth handling for the selected workflow.
+- Do not perform CLI version checks at the router level.
+- Do not run `orahub --version` or `orahub auth verify --json` at the router level.
+- If the selected workflow reports runtime unavailable or outdated, the agent should request user approval to install or upgrade the runtime, then retry automatically.
+- If the selected workflow reports missing credentials, the agent should request user approval to start authentication, then retry automatically.
+- Only fall back to manual setup guidance when the current client cannot execute commands, cannot support the auth flow, or the user denies approval.
+
+Bootstrap commands:
+
+```bash
+npm install -g orahub-cli
+orahub --version
+orahub auth device-login
+```
+
 ## Core Workflow
 
 ```text
@@ -46,25 +66,13 @@ Preflight -> Route -> Execute -> Deliver
 
 ### Preflight
 
-Before routing to a leaf skill, run the same shared OraHub checks used by `photo-color-match`:
+Before routing to a leaf skill, only do router-level checks:
 
-1. Verify that `orahub` is available:
+1. Apply the shared platform compatibility rules from `references/platform-compatibility.md`.
 
-```bash
-orahub --version
-```
+2. If the request is ambiguous, ask one short clarification before routing.
 
-2. Verify authentication:
-
-```bash
-orahub auth verify --json
-```
-
-3. If either check fails, stop immediately and report the real issue:
-
-- missing CLI -> `orahub` CLI is not available on the machine; ask the user to install it with `npm install -g orahub-cli`
-- exit code `2` -> credentials are not configured; ask the user to run `orahub auth device-login` or manually set with `orahub config set`
-- exit code `3` -> authentication failed
+3. Do not run standalone runtime or authentication checks here. The selected leaf skill owns runtime/auth validation, workflow execution, install/auth approval requests, retry behavior, and manual fallback guidance.
 
 4. If running inside OpenClaw, follow the shared platform compatibility rules in `references/platform-compatibility.md`.
 

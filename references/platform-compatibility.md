@@ -67,7 +67,7 @@ Memory rules for OraHub image skills:
 
 ## Shared OraHub CLI Rules
 
-Already verified on the current machine:
+Expected when the current machine already has a working OraHub runtime:
 
 - `orahub --version` is available
 - `orahub auth verify --json` returns structured JSON
@@ -77,6 +77,15 @@ Already verified on the current machine:
   - `orahub photo-background-replace`
   - `orahub photo-passersby-removal`
   - `orahub photo-remove-background`
+
+Runtime bootstrap policy for this package:
+
+- The router only routes; it does not run standalone runtime or auth checks
+- The selected leaf workflow should try its own workflow command with the current local runtime first
+- Do not mutate the environment silently. Any install, upgrade, or auth step must be executed by the agent only after explicit user approval
+- If `orahub` is missing or outdated, the agent should request approval to install or upgrade the runtime, then retry the workflow automatically
+- If credentials are missing or invalid, the agent should request approval to start authentication, then retry the workflow automatically
+- Only fall back to manual setup guidance when the current client cannot execute commands, cannot support the auth flow, or the user denies approval
 
 Shared exit codes:
 
@@ -101,9 +110,11 @@ When credentials are missing, the real `auth verify` failure shape is typically 
 
 Shared handling rules:
 
-- If `orahub --version` fails, stop and tell the user to install the CLI with `npm install -g orahub-cli`
-- If `orahub auth verify --json` exits with `2`, treat it as "not configured" and ask the user to run `orahub auth device-login` (primary) or `orahub config set --access-key <ak> --secret-key <sk>` (manual fallback)
-- If `orahub auth verify --json` exits with `3`, treat it as "authentication failed"
+- Do not require the router to run `orahub --version` or `orahub auth verify --json` before routing
+- If a leaf workflow command fails with command-not-found, unknown-command, or similar runtime mismatch output, treat it as runtime unavailable or outdated; request user approval to run `npm install -g orahub-cli`, verify with `orahub --version`, then retry the same workflow once
+- If a leaf workflow command exits with `2`, treat it as "not configured"; request user approval to run `orahub auth device-login` (primary), then retry the same workflow once. If the user prefers API keys, collect credentials and use `orahub config set --access-key <ak> --secret-key <sk>` instead
+- If a leaf workflow command exits with `3`, treat it as "authentication failed"; request user approval to re-run `orahub auth device-login` or reconfigure with `orahub config set`, then retry the same workflow once
+- If command execution or auth is not possible in the current client, or the user denies approval, return the equivalent manual commands and stop
 - If a command exits with `4` and includes `ENOENT`, treat it as "local input path validation failed"
 - If a command exits with `0` but no output file is produced, treat it as "execution failed"
 

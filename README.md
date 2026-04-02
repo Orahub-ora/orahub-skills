@@ -91,34 +91,91 @@ Highlights:
 
 ## Installation
 
-Install the bundled OraHub skill package:
+### Step 1 — Install the skill package
+
+Install using the command for your agent platform. The package registers one root skill (`orahub-skills`); leaf workflows are bundled inside and used by the router at runtime.
+
+#### Claude Code
 
 ```bash
 npx skills add https://github.com/Orahub-ora/orahub-skills
+# Installed to: ~/.claude/skills/orahub-skills/
 ```
 
-Current `skills` CLI discovery installs this repository as one root skill: `orahub-skills`.
-The leaf workflows remain bundled inside the installed package and are used by the router skill at runtime.
+#### OpenClaw
 
-## Requirements
+```bash
+npx skills add https://github.com/Orahub-ora/orahub-skills
+# Installed to: {OPENCLAW_HOME}/workspace/skills/orahub-skills/
+```
 
-These skills depend on the `orahub` CLI:
+#### Cursor
+
+```bash
+git clone https://github.com/Orahub-ora/orahub-skills ~/.cursor/orahub-skills
+```
+
+Point your Cursor skills path to `~/.cursor/orahub-skills/`.
+
+#### OpenCode
+
+```bash
+git clone https://github.com/Orahub-ora/orahub-skills ~/.config/opencode/skills/orahub-skills
+```
+
+### Step 2 — Install the runtime CLI (required)
+
+The `orahub` CLI is required for all workflows. Install it before first use, or let the agent install it automatically when you first trigger a workflow.
 
 ```bash
 npm install -g orahub-cli
 ```
 
-Authenticate before use:
+### Step 3 — Authenticate (required)
+
+Authenticate before first use, or let the agent prompt you automatically when credentials are missing.
 
 ```bash
 orahub auth device-login
 ```
 
-Verify installation and authentication:
+Manual fallback:
+
+```bash
+orahub config set --access-key "<ak>" --secret-key "<sk>"
+```
+
+### Step 4 — Optional smoke test
 
 ```bash
 orahub --version
 orahub auth verify --json
+```
+
+### First-use bootstrap
+
+- When the user triggers an OraHub skill, the agent should try the requested workflow first.
+- If the local OraHub runtime is missing or outdated, the agent should request user approval to run:
+
+```bash
+npm install -g orahub-cli
+orahub --version
+```
+
+- After install succeeds, the agent should retry the same workflow automatically.
+- If the workflow reports missing credentials, the agent should request user approval to run:
+
+```bash
+orahub auth device-login
+```
+
+- After authentication succeeds, the agent should retry the same workflow automatically.
+- Only if the current client cannot execute commands, cannot support the auth flow, or the user denies approval, fall back to manual setup:
+
+```bash
+npm install -g orahub-cli
+orahub --version
+orahub auth device-login
 ```
 
 ## Usage

@@ -18,6 +18,26 @@ This skill only defines business execution rules. If it runs inside OpenClaw, at
 - Credentials: `orahub auth device-login` (primary) or `orahub config set --access-key "<ak>" --secret-key "<sk>"` (manual fallback)
 - Verify auth: `orahub auth verify --json`
 
+## Runtime Bootstrap (Required)
+
+Before asking the user to install anything manually, follow this policy:
+
+- Do not block on manual install questions before first execution.
+- Attempt this workflow command with the current `orahub` runtime first once inputs are complete.
+- Do not mutate the environment silently. Any install, upgrade, or auth step must be executed by the agent only after explicit user approval.
+- Do not run standalone `orahub --version` as a gate before the workflow command.
+- If the runtime is unavailable or outdated, request user approval to run the install command, verify with `orahub --version`, then retry this workflow automatically.
+- If credentials are missing, request user approval to run `orahub auth device-login`, then retry this workflow automatically.
+- Only fall back to manual setup guidance when the current client cannot execute commands, cannot support the auth flow, or the user denies approval.
+
+Bootstrap commands:
+
+```bash
+npm install -g orahub-cli
+orahub --version
+orahub auth device-login
+```
+
 ## Core Workflow
 
 ```text
@@ -26,34 +46,27 @@ Preflight -> Execute -> Deliver
 
 ### Preflight
 
-Complete these checks before each run. If already invoked through the `orahub-skills` router and preflight was completed this session, skip steps 1 and 2.
+Complete these checks before each run. The router does not perform runtime or auth checks for this workflow.
 
-1. Verify that `orahub` is available:
-
-```bash
-orahub --version
-```
-
-2. Verify authentication:
-
-```bash
-orahub auth verify --json
-```
-
-3. Resolve `output_path`:
+1. Resolve `output_path`:
 
 - If the user explicitly provides an output path, use it directly
 - If the original image is a local path and no output path is provided, save next to the original image as `{original_filename}_ora_ai_color_match.{ext}`
 - If the original image is a URL and no output path is provided, save to `./output/photo-color-match/{YYYY-MM-DD}_{original_stem_or_index}_ora_ai_color_match.{ext}`
 
-4. Create the output directory if it does not exist.
+2. Create the output directory if it does not exist.
 
-5. Critical constraints:
+3. Critical constraints:
 
 - CRITICAL: Always include `--color-ref`. Omitting it will silently use the wrong input as the color source and produce an incorrect result.
 - CRITICAL: In OpenClaw, do not assume two image attachments are both available. The shared reference only guarantees the first matching inbound image attachment by default. If the second image is missing, ask the user for a stable local path or `http(s)` URL before executing.
 - CRITICAL: Only accept public `http(s)` image URLs. Reject `localhost`, loopback, private-network IPs, link-local IPs, metadata endpoints, and other non-public hosts.
 - CRITICAL: Supported input shapes are only `1 original + 1 reference` or `N originals + 1 shared reference`. Do not run multi-reference batches in a single request.
+- Do not run standalone `orahub --version` or `orahub auth verify --json` before the workflow command.
+- If the workflow command fails with command-not-found, unknown-command, or similar runtime mismatch output, request user approval to run `npm install -g orahub-cli`; after install succeeds, verify with `orahub --version` and retry this workflow once.
+- If the workflow command exits with `2`, treat it as credentials/configuration missing and request user approval to run `orahub auth device-login`; after auth succeeds, retry this workflow once. If the user prefers API keys, collect credentials and use `orahub config set` instead.
+- If the workflow command exits with `3`, treat it as authentication failed and request user approval to re-run `orahub auth device-login` or reconfigure with `orahub config set`, then retry once.
+- If install/auth commands cannot be executed in the current client, or the user denies approval, return the equivalent manual commands and stop.
 
 ### Execute
 
@@ -166,6 +179,7 @@ Stop immediately for these cases and do not enter L1-L4:
 
 - exit code `1`: command or parameter error
 - exit code `2` or `3`: configuration or authentication error
+- exit code `4` with `ENOENT`: local path validation failed — file does not exist; ask the user to provide a valid path
 - unsupported multi-reference batch shape
 - any URL that is non-public, points to `localhost`, a private-network IP, a link-local IP, or a metadata endpoint
 - obviously non-image URLs or unsupported file types
@@ -200,7 +214,7 @@ Batch delivery:
 
 - Deliver each output file immediately after its CLI call succeeds, in order
 - For each item: check file exists and size > 0, then deliver
-- If an item was skipped due to a non-recoverable error, report it inline (e.g. "Item 3 failed: <error>") and continue delivering the rest
+- If the batch stops on a non-recoverable error, report the failed item inline (e.g. "Item 3 failed: <error>") and do not continue with later items
 - After the loop, print a summary: total requested / succeeded / failed
 
 In a regular editor:
